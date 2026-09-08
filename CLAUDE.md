@@ -33,94 +33,71 @@ Never stop before pushing — that strands work locally. If the push fails, reso
 
 ## Project Overview
 
-Meeting Alarm: an Android app that reads the phone's calendar provider (Google Calendar syncs into it),
-decides which meetings deserve a real alarm (criteria + per-meeting toggles), and creates/removes those
-alarms in the Google Clock app via `AlarmClock.ACTION_SET_ALARM` / `ACTION_DISMISS_ALARM`. A morning
-digest notification lists the day's meetings so alarms can be reviewed. The app never rings anything
-itself. Design and phases: `PLAN.md` (written before beads was adopted; migrate into beads epics via
-`/plan` rather than extending it).
+Calendar Phone Alarm is a personal Android app that makes sure I do not miss meetings. It reads the
+phone's calendar provider (Google Calendar syncs into it), shows upcoming meetings with an alarm toggle
+each, and creates or removes matching alarms in the **Google Clock app** through the public
+`AlarmClock.ACTION_SET_ALARM` / `ACTION_DISMISS_ALARM` intents. A morning digest notification lists the
+day's meetings so alarms can be reviewed. The app never rings anything itself.
 
-Stack: Kotlin, Jetpack Compose, Room, WorkManager, Hilt. minSdk 31, target latest stable.
-Google Clock only; no other OEM Clock apps, no Wear OS.
+Repo: https://github.com/jdelfino/calendar-phone-alarm. Single developer, sideloaded, one phone
+(Pixel / Google Clock). Not published to Play.
+
+The original design write-up is `PLAN.md`. It predates beads; do not extend it. Planning context goes
+into beads issues.
+
+## Stack
+
+- Kotlin, single Gradle module `app`, Kotlin DSL build files, version catalog (`gradle/libs.versions.toml`).
+- Jetpack Compose (Material 3) for UI. Room for persistence. WorkManager for background sync.
+  kotlinx.coroutines / Flow throughout.
+- **No dependency-injection framework.** A hand-written `AppGraph` (created in `Application.onCreate`)
+  builds and exposes the database, repositories, and use cases. Constructor injection everywhere so tests
+  can pass fakes.
+- minSdk 33, targetSdk = compileSdk = latest stable. Android 13+ only, so `POST_NOTIFICATIONS` is a
+  runtime permission everywhere and no API-level branching is needed.
 
 ## Commands
 
 ```bash
-./gradlew assembleDebug            # Build debug APK
-./gradlew testDebugUnitTest        # Unit tests
-./gradlew lint                     # Android lint
-./gradlew connectedDebugAndroidTest  # Instrumented tests (device/emulator attached)
+./gradlew testDebugUnitTest   # JVM unit tests (plain JUnit + Robolectric)
+./gradlew lint                # Android lint
+./gradlew assembleDebug       # Debug APK -> app/build/outputs/apk/debug/app-debug.apk
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
 ## Quality Gates
 
-| Area            | Tests                                 | Lint              | Typecheck |
-| --------------- | ------------------------------------- | ----------------- | --------- |
-| App (JVM)       | `./gradlew testDebugUnitTest`         | `./gradlew lint`  | —         |
-| Instrumented    | `./gradlew connectedDebugAndroidTest` | —                 | —         |
+| Area   | Tests                         | Lint             | Build                    |
+| ------ | ----------------------------- | ---------------- | ------------------------ |
+| app    | `./gradlew testDebugUnitTest` | `./gradlew lint` | `./gradlew assembleDebug` |
 
-Instrumented tests require an attached device or emulator; skip them in review passes when none is
-available and say so.
+All gates run on the JVM with no device. UI/instrumented tests are **not** required. CI (GitHub Actions)
+runs the same three commands on every push and pull request.
 
-## Development Guidelines
+## Testing Conventions
 
-- Alarm delivery is delegated to Google Clock. Do not add an in-app ringer, exact-alarm, full-screen-intent,
-  or foreground-service code; if a need arises, file a beads issue and discuss first.
-- Clock alarms are time-of-day only (no date). Only create alarms for meetings starting within 24 h.
-- Every alarm the app creates is recorded in the Room ledger; Clock intents are only sent for the diff
-  between desired and ledger. Labels carry a short unique token; dismiss searches by that token only
-  (Clock's label match is a substring match and 2+ matches open a picker).
-- Keep calendar access read-only (`READ_CALENDAR`); never write to the calendar provider.
-- Business logic (criteria resolver, diffing, label tokens, digest content) lives in plain Kotlin with
-  unit tests; Android framework calls sit behind thin interfaces so they can be faked.
-- Permissions: `READ_CALENDAR`, `POST_NOTIFICATIONS`, `com.android.alarm.permission.SET_ALARM`,
-  `RECEIVE_BOOT_COMPLETED`. Adding any other permission needs a beads issue explaining why.
+- Business logic (criteria, alarm resolution, ledger diffing, label tokens, digest text, time windows)
+  is plain Kotlin with no Android imports and is tested with JUnit.
+- Code that must touch Android classes (Room DAOs, `CalendarContract` cursor mapping, `Intent`
+  construction, notification building) is tested with Robolectric.
+- Android framework calls sit behind small interfaces (`CalendarSource`, `ClockAlarms`, `Clock`,
+  `Notifier`) so use cases are tested with in-memory fakes, not mocks.
+- Every time-dependent computation takes a `Clock`/`Instant` parameter; tests never depend on wall time.
 
+## Product Rules (do not change without a beads issue)
 
-<!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:ca08a54f -->
-## Beads Issue Tracker
-
-This project uses **bd (beads)** for issue tracking. Run `bd prime` to see full workflow context and commands.
-
-### Quick Reference
-
-```bash
-bd ready              # Find available work
-bd show <id>          # View issue details
-bd update <id> --claim  # Claim work
-bd close <id>         # Complete work
-```
-
-### Rules
-
-- Use `bd` for ALL task tracking — do NOT use TodoWrite, TaskCreate, or markdown TODO lists
-- Run `bd prime` for detailed command reference and session close protocol
-- Use `bd remember` for persistent knowledge — do NOT use MEMORY.md files
-
-## Session Completion
-
-**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
-
-**MANDATORY WORKFLOW:**
-
-1. **File issues for remaining work** - Create issues for anything that needs follow-up
-2. **Run quality gates** (if code changed) - Tests, linters, builds
-3. **Update issue status** - Close finished work, update in-progress items
-4. **PUSH TO REMOTE** - This is MANDATORY:
-   ```bash
-   git pull --rebase
-   bd dolt push
-   git push
-   git status  # MUST show "up to date with origin"
-   ```
-5. **Clean up** - Clear stashes, prune remote branches
-6. **Verify** - All changes committed AND pushed
-7. **Hand off** - Provide context for next session
-
-**CRITICAL RULES:**
-- Work is NOT complete until `git push` succeeds
-- NEVER stop before pushing - that leaves work stranded locally
-- NEVER say "ready to push when you are" - YOU must push
-- If push fails, resolve and retry until it succeeds
-<!-- END BEADS INTEGRATION -->
+- **Alarm delivery is Google Clock's job.** No in-app ringer, no `SCHEDULE_EXACT_ALARM`, no full-screen
+  intent, no foreground service. `AlarmManager` is used only for the inexact daily digest trigger.
+- **Default is off.** A meeting gets an alarm only if the user toggled it on (per instance or for the
+  whole series). The criteria (has at least one other attendee, not declined, not all-day, not marked
+  free) decide which meetings are *eligible* and which days get a digest, not which meetings are armed.
+- **Clock alarms are time-of-day only.** Only create alarms for meetings starting within the next 24 h.
+  Every trigger (periodic sync, digest time, boot, timezone change, calendar reminder broadcast, user
+  toggle) runs the same sync: desired alarms vs. ledger, then set/dismiss the difference.
+- **Ledger.** Every alarm the app creates is recorded in Room (event id, instance start, label token).
+  Labels are `<meeting title> ⏰<token>`; dismiss searches by the token alone because Clock's label match
+  is a substring match and two or more matches open a picker.
+- **Calendar access is read-only** (`READ_CALENDAR`). Never write to the calendar provider.
+- **Permissions:** `READ_CALENDAR`, `POST_NOTIFICATIONS`, `com.android.alarm.permission.SET_ALARM`,
+  `RECEIVE_BOOT_COMPLETED`. Anything else needs a beads issue explaining why.
+- Google Clock only. No other OEM Clock apps, no Wear OS, no tablets.

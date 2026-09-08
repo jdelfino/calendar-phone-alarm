@@ -27,15 +27,15 @@ morning notification showing the day's schedule so alarms can be reviewed before
   choice for recurring meetings, join link, attendees, open in Google Calendar.
 - **Settings**: criteria (min other attendees, calendars included, ignore all-day, ignore declined,
   ignore "free"), default lead time, default state for qualifying meetings (armed / not armed),
-  digest time and on/off, alarm sound, volume ramp, auto-stop, snooze length, permission checklist.
+  digest time and on/off, permission checklist. (Sound, volume, snooze are Clock's settings, not ours.)
 
 ### Alarm state model
 - Every meeting *instance* resolves to armed/not armed as: **user override if present, else the
   criteria-based default.** Overrides are stored in Room keyed by (event id, instance start) so they
   survive calendar re-syncs and app restarts. Series-wide overrides are keyed by event id.
-- Recommended default: **armed for qualifying meetings** (≥1 other attendee, not declined, not all-day,
-  not marked free). Missing a meeting is the failure mode, so the morning review is a chance to turn
-  alarms *off*, not a required step to turn them on.
+- Default: **off**. The criteria (≥1 other attendee, not declined, not all-day, not marked free) decide
+  which meetings are *eligible* and which days get a digest; only an explicit toggle (per instance or
+  whole series) arms an alarm. The morning digest is where alarms get turned on.
 - If a meeting is cancelled, moved, or declined after being armed, the alarm follows it (re-validated
   on every sync and again right before ringing).
 
@@ -62,9 +62,9 @@ morning notification showing the day's schedule so alarms can be reviewed before
   so the unique token is what keeps dismiss silent; never rely on the title alone.
 - Dismiss only considers *enabled* alarms with an upcoming instance; an alarm the user manually switched
   off in Clock is left alone (that is fine: it will not ring).
-- Because the intent has no date, alarms are only ever created for meetings starting within the next 24 h:
-  the morning job creates today's, the periodic sync picks up meetings added mid-day, and an evening job
-  covers meetings that start before tomorrow's morning job.
+- Because the intent has no date, alarms are only ever created for meetings starting within the next 24 h.
+  A single sync routine (desired vs. ledger → set/dismiss the difference) runs on every trigger: periodic
+  worker, digest time, boot, timezone change, calendar reminder broadcast, user toggle.
 - Ringing, snooze, DND exemption, lock-screen UI, status-bar icon, and volume all come from Clock for free.
 - Scope: **Google Clock only** (Pixel / AOSP-derived). Other OEM Clock apps are out of scope.
 - Limitation accepted for now: no Join button on the alarm screen (the Clock alarm shows only the label).
@@ -98,7 +98,7 @@ Notes:
 Permissions: `READ_CALENDAR`, `POST_NOTIFICATIONS`, `com.android.alarm.permission.SET_ALARM`,
 `RECEIVE_BOOT_COMPLETED`. 
 
-Stack: Kotlin, Jetpack Compose, Room, WorkManager, Hilt; minSdk 31, target latest.
+Stack: Kotlin, Jetpack Compose, Room, WorkManager; no DI framework (hand-written AppGraph); minSdk 33, target latest.
 Distribution: sideload / Play internal testing first.
 
 ## 4. Phases
@@ -115,7 +115,7 @@ Distribution: sideload / Play internal testing first.
 morning job, onboarding permissions.
 
 **Phase 2 — digest**: morning notification with bulk actions and deep link, mid-day change handling,
-evening job for early meetings, reboot/timezone handling.
+reboot/timezone handling.
 
 **Phase 3 — polish**: series vs instance overrides, per-meeting lead time, join-link extraction shown in the app/digest.
 
