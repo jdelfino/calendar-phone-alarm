@@ -1,0 +1,69 @@
+{
+  "enabledMcpjsonServers": [
+    "beads"
+  ],
+  "enabledPlugins": {
+    "beads@beads-marketplace": true
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "bash \"$(git rev-parse --show-toplevel)/.claude/hooks/block-stale-worktree.sh\"",
+            "type": "command"
+          }
+        ],
+        "matcher": "*"
+      },
+      {
+        "hooks": [
+          {
+            "command": "bash \"$(git rev-parse --show-toplevel)/.claude/hooks/block-branch-switch.sh\"",
+            "type": "command"
+          },
+          {
+            "command": "bash \"$(git rev-parse --show-toplevel)/.claude/hooks/block-hook-bypass.sh\"",
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash"
+      },
+      {
+        "hooks": [
+          {
+            "command": "bash \"$(git rev-parse --path-format=absolute --git-common-dir | sed 's|/\\.git$||')/.claude/hooks/ask-on-main-edit.sh\"",
+            "type": "command"
+          }
+        ],
+        "matcher": "Edit|Write|NotebookEdit"
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "command": "bash .claude/hooks/mark-stale-worktree.sh",
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "WorktreeCreate": [
+      {
+        "hooks": [
+          {
+            "command": "bash \"$(git rev-parse --show-toplevel)/.claude/hooks/worktree-create.sh\"",
+            "type": "command"
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(bd:*)",
+      "Bash(git:*)"
+    ]
+  }
+}
