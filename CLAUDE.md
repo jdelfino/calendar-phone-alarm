@@ -1,7 +1,5 @@
 # CLAUDE.md
 
-This is the reference implementation of an agent-friendly development workflow for Claude Code. To adopt it, copy the `.claude/` directory into your project and replace the **Project-Specific** section at the bottom of this file with your project's details.
-
 ## Agent Instructions
 
 You are an experienced software engineer, building well-structured, well-maintained software. Do not create or tolerate significant duplication, architectural mess, or poor code organization. Clean small messes up immediately, and file beads issues for resolving larger issues in follow-on work.
@@ -10,19 +8,29 @@ Beads is the store for planning. Do not create standalone planning or design mar
 
 ## Issue Tracking (beads)
 
-This project uses **bd (beads)** for ALL task tracking — never markdown TODOs or other trackers. The command reference and session-close protocol are primed automatically by the beads plugin at session start (run `bd prime` if you need them again).
+All task tracking lives in **bd (beads)**; the managed *Beads Issue Tracker* block at the end of this file
+(written by `bd setup claude`, verified with `bd setup claude --check`) is the authoritative usage guide,
+and `bd prime` is injected at session start by the beads plugin.
 
-One thing prime doesn't emphasize and agents get wrong — the **dependency-direction trap:** `bd dep add X Y` means "X needs Y" = Y blocks X. Temporal words ("Phase 1", "before", "first") invert your thinking. Verify with `bd blocked` (tasks blocked by prerequisites, not their dependents).
+**This repository opts in to the Team-maintainer profile** described in that block: agents may close
+beads, run quality gates, commit, and push as part of session close, unless a current instruction says
+not to.
+
+One thing prime doesn't emphasize and agents get wrong — the **dependency-direction trap:** `bd dep add X Y`
+means "X needs Y" = Y blocks X. Temporal words ("Phase 1", "before", "first") invert your thinking.
+Verify with `bd blocked` (tasks blocked by prerequisites, not their dependents).
 
 ## Landing the Plane (Session Completion)
 
-Work is **not** complete until `git push` succeeds. When ending a session: file beads issues for follow-up work, run quality gates if code changed, close finished issues, then push:
+Work is **not** complete until `git push` succeeds. When ending a session: file beads issues for
+follow-up work, run quality gates if code changed, close finished issues, then push both code and
+issue data:
 
 ```bash
 git pull --rebase
-bd sync
 git push
-git status   # MUST show "up to date with origin"
+bd dolt push        # issue data lives under refs/dolt/data on origin
+git status          # MUST show "up to date with origin"
 ```
 
 Never stop before pushing — that strands work locally. If the push fails, resolve and retry until it succeeds.
@@ -101,3 +109,59 @@ runs the same three commands on every push and pull request.
 - **Permissions:** `READ_CALENDAR`, `POST_NOTIFICATIONS`, `com.android.alarm.permission.SET_ALARM`,
   `RECEIVE_BOOT_COMPLETED`. Anything else needs a beads issue explaining why.
 - Google Clock only. No other OEM Clock apps, no Wear OS, no tablets.
+
+
+<!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:6cd5cc61 -->
+## Beads Issue Tracker
+
+This project uses **bd (beads)** for issue tracking. Run `bd prime` to see full workflow context and commands.
+
+### Quick Reference
+
+```bash
+bd ready              # Find available work
+bd show <id>          # View issue details
+bd update <id> --claim  # Claim work
+bd close <id>         # Complete work
+```
+
+### Rules
+
+- Use `bd` for ALL task tracking — do NOT use TodoWrite, TaskCreate, or markdown TODO lists
+- Run `bd prime` for detailed command reference and session close protocol
+- Use `bd remember` for persistent knowledge — do NOT use MEMORY.md files
+
+**Architecture in one line:** issues live in a local Dolt DB; sync uses `refs/dolt/data` on your git remote; `.beads/issues.jsonl` is a passive export. See https://github.com/gastownhall/beads/blob/main/docs/SYNC_CONCEPTS.md for details and anti-patterns.
+
+## Agent Context Profiles
+
+The managed Beads block is task-tracking guidance, not permission to override repository, user, or orchestrator instructions.
+
+- **Conservative (default)**: Use `bd` for task tracking. Do not run git commits, git pushes, or Dolt remote sync unless explicitly asked. At handoff, report changed files, validation, and suggested next commands.
+- **Minimal**: Keep tool instruction files as pointers to `bd prime`; use the same conservative git policy unless active instructions say otherwise.
+- **Team-maintainer**: Only when the repository explicitly opts in, agents may close beads, run quality gates, commit, and push as part of session close. A current "do not commit" or "do not push" instruction still wins.
+
+## Session Completion
+
+This protocol applies when ending a Beads implementation workflow. It is subordinate to explicit user, repository, and orchestrator instructions.
+
+1. **File issues for remaining work** - Create beads for anything that needs follow-up
+2. **Run quality gates** (if code changed) - Tests, linters, builds
+3. **Update issue status** - Close finished work, update in-progress items
+4. **Handle git/sync by active profile**:
+   ```bash
+   # Conservative/minimal/default: report status and proposed commands; wait for approval.
+   git status
+
+   # Team-maintainer opt-in only, unless current instructions forbid it:
+   git pull --rebase
+   git push
+   git status
+   ```
+5. **Hand off** - Summarize changes, validation, issue status, and any blocked sync/commit/push step
+
+**Critical rules:**
+- Explicit user or orchestrator instructions override this Beads block.
+- Do not commit or push without clear authority from the active profile or the current user request.
+- If a required sync or push is blocked, stop and report the exact command and error.
+<!-- END BEADS INTEGRATION -->
