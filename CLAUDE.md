@@ -106,8 +106,13 @@ runs the same three commands on every push and pull request.
   Labels are `<meeting title> ⏰<token>`; dismiss searches by the token alone because Clock's label match
   is a substring match and two or more matches open a picker.
 - **Calendar access is read-only** (`READ_CALENDAR`). Never write to the calendar provider.
+- **Background launches.** Clock's intents are handled by an Activity, and Android 10+ blocks
+  `startActivity` from the background. The app asks for `SYSTEM_ALERT_WINDOW` ("Display over other apps"),
+  the documented exemption. When the app is neither visible nor overlay-permitted, a sync must not send
+  Clock intents: it leaves the ledger alone and posts an "alarm changes waiting" notification instead.
+  Notification actions that lead to Clock intents must be activity PendingIntents, never receivers.
 - **Permissions:** `READ_CALENDAR`, `POST_NOTIFICATIONS`, `com.android.alarm.permission.SET_ALARM`,
-  `RECEIVE_BOOT_COMPLETED`. Anything else needs a beads issue explaining why.
+  `SYSTEM_ALERT_WINDOW`, `RECEIVE_BOOT_COMPLETED`. Anything else needs a beads issue explaining why.
 - Google Clock only. No other OEM Clock apps, no Wear OS, no tablets.
 
 
